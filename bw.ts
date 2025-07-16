@@ -10,9 +10,69 @@ import * as cheerio from 'cheerio'
 import type { Job } from 'pg-boss'
 import { ja, no, tr } from 'zod/v4/locales'
 import { AnyNode } from 'domhandler'
+import { number } from 'zod/v4'
 //import parser from 'xml2json'
 //import SourceAnimeNewsNetwork from '../models/SourceAnimeNewsNetwork.model'
 //import { Queue, QueueClient } from '../queue'
+
+export async function new_pending_releases_parge_page($: cheerio.CheerioAPI) {
+	// Parse each new release until last_date and/or last_title OR no release date
+	const new_pending_releases: Record<string, any>[] = []
+	let run: boolean = true
+
+	const title_list = $('ul.o-tile-list')
+	for (const item of title_list.children('li')) {
+		const $item = $(item)
+		const title = $item.find('.a-tile-ttl').text().trim()
+		const title_url = $item.find('.a-tile-ttl a').attr('href')
+		const release_date = $item.find('.a-tile-release-date')?.text().replace(' release', '')
+		if (release_date == '') {
+			run = false
+		} else {
+			new_pending_releases.push({'title': title, 'url': title_url, 'release_date': release_date})
+		}
+	}
+	return {'releases': new_pending_releases, 'next_page': run}
+}
+
+export async function new_pending_releases() {
+	const all_releases: Record<string, any>[] = []
+	let page: number = 0
+	let next_page: boolean = true
+
+	while (next_page) {
+		page += 1
+		try {
+				const response = await axios.get(`https://global.bookwalker.jp/categories/2/?order=release&np=1&page=${page.toString()}`, {
+						maxRedirects: 1,
+				});
+
+				if (response.status !== 200) {
+						throw new Error(`Failed to retrieve new releases page - got response code [${response.status}]`);
+				}
+
+				console.log(`Successfully fetched page ${page.toString()}. Loading with Cheerio...`)
+				const $ = cheerio.load(response.data)
+
+				const parsedData = await new_pending_releases_parge_page($)
+				all_releases.push(...parsedData['releases'])
+				next_page = parsedData['next_page']
+
+		} catch (error: any) {
+				console.error('An error occurred during parsing:');
+				if (error.response) {
+						console.error(`Status: ${error.response.status}`);
+						console.error(`Data: ${JSON.stringify(error.response.data, null, 2)}`);
+				} else if (error instanceof Error) {
+						console.error(`Error: ${error.message}`);
+				} else {
+						console.error(error); // Fallback for unexpected error types
+				}
+				process.exit(1);
+		}
+	}
+	return all_releases
+}
 
 export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume: boolean = true) {
 	// TODO detect chapter/volume?

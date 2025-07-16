@@ -1,4 +1,4 @@
-import { bwg_parse_page } from './bw.js';
+import { bwg_parse_page, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -58,6 +58,14 @@ async function runParser(id: string, isVolume: boolean = true): Promise<void> {
 }
 
 // Get the URL from command line arguments
-const url = process.argv[2];
-const isVol = process.argv[3] ? Boolean(Number(process.argv[3])) : true;
-runParser(url, isVol);
+const cmd = process.argv[2];
+const url = process.argv[3];
+const isVol = process.argv[4] ? Boolean(Number(process.argv[4])) : true;
+
+if (cmd == 'vol') {
+    runParser(url, isVol);
+} else if (cmd == 'new') {
+    const new_releases = await new_pending_releases();
+    const file_path = './data/manga_new_releases_' + Date.now().toString() + '.json'
+    saveJsonToFileAsync(new_releases, file_path)
+}

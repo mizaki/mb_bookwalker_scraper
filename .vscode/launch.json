@@ -8,6 +8,7 @@
       "preLaunchTask": "npm: build", // This will run the 'build-parser' script defined in your package.json via tasks.json
       "program": "${workspaceFolder}/dist/runner.js", // Path to the compiled JS file (adjust 'dist' if different)
       "args": [
+        "${input:cmdInput}"
         "${input:urlInput}", // This will prompt you for the URL
         "${input:volInput}"
       ],
@@ -24,10 +25,16 @@
   ],
   "inputs": [
     {
+      "id": "cmdInput",
+      "type": "promptString",
+      "description": "Command (vol, new):",
+      "default": "new"
+    },
+    {
       "id": "urlInput",
       "type": "promptString",
       "description": "Enter the ID to parse:",
-      "default": "de51c00cf5-039a-4495-ae24-6a64bd02abfc" // A default ID
+      "default": "de51c00cf5-039a-4495-ae24-6a64bd02abfc"
     },
     {
       "id": "volInput",
