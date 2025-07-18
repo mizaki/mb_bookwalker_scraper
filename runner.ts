@@ -1,4 +1,4 @@
-import { all_series_page_parse, all_publishers_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
+import { all_series_page_parse, all_publishers_page_parse, all_authors_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -127,4 +127,8 @@ if (cmd == 'vol') {
     const publishers = await all_publishers_page_parse()
     const file_path = './data/publishers_' + Date.now().toString() + '.json'
     saveJsonToFileAsync(publishers, file_path)
+} else if (cmd == 'authors') {
+    const authors = await all_authors_page_parse()
+    const file_path = './data/authors_' + Date.now().toString() + '.json'
+    saveJsonToFileAsync(authors, file_path)
 }

@@ -16,6 +16,28 @@ import { number } from 'zod/v4'
 //import SourceAnimeNewsNetwork from '../models/SourceAnimeNewsNetwork.model'
 //import { Queue, QueueClient } from '../queue'
 
+export async function all_authors_page_parse() {
+	const all_series: Record<string, any>[] = []
+
+	const $ = await http_request('https://global.bookwalker.jp/authors/')
+
+	const all_letters = $('ul.link-list')
+	for (const letter of all_letters) {
+		const $letter = $(letter)
+	
+		for (const item of $letter.children('li')) {
+			const $item = $(item)
+			const name = $item.text().trim()
+			const author_url_stub = $item.find('a').attr('href')
+			const author_url = author_url_stub ? new URL(`https://global.bookwalker.jp${author_url_stub}`) : null
+			const author_id = author_url?.pathname ? /\d+/.exec(author_url.pathname) : null
+			all_series.push({'author_name': name, 'author_url': author_url?.toString(), 'author_id': Number(author_id)})
+			
+		}
+	}
+	return all_series
+}
+
 export async function all_publishers_page_parse() {
 	const all_publishers: Record<string, any>[] = []
 
