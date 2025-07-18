@@ -4,6 +4,7 @@ import { string_to_date } from './date.js'
 import { BookWalkerGlobalMangaBakaSeries } from './bw.types.js'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
+import { http_request } from './runner.js'
 //import tracer, { type TraceOptions } from 'dd-trace'
 //import { kinds } from 'dd-trace/ext'
 //import tags from 'dd-trace/ext/tags'
@@ -15,63 +16,60 @@ import { number } from 'zod/v4'
 //import SourceAnimeNewsNetwork from '../models/SourceAnimeNewsNetwork.model'
 //import { Queue, QueueClient } from '../queue'
 
+export async function all_publishers_page_parse() {
+	const all_publishers: Record<string, any>[] = []
+
+	const $ = await http_request('https://global.bookwalker.jp/publishers/')
+
+	const all = $('ul.link-list')
+	for (const pub of all.children('li')) {
+		const $pub = $(pub)
+		const publisher = $pub.text().trim()
+		const publisher_url_stub = $pub.find('a').attr('href')
+		const publisher_url = publisher_url_stub ? new URL(`https://global.bookwalker.jp${publisher_url_stub}`) : null
+		const publisher_id = publisher_url?.pathname ? /\d+/.exec(publisher_url.pathname) : null
+		all_publishers.push({'publisher_name': publisher, 'publisher_url': publisher_url?.toString(), 'publisher_id': Number(publisher_id)})
+	}
+
+	return all_publishers
+}
+
 export async function all_series_page_parse() {
 	const all_series: Record<string, any>[] = []
-	try {
-		const response = await axios.get(`https://global.bookwalker.jp/series/`, {
-				maxRedirects: 1,
-		});
 
-		if (response.status !== 200) {
-				throw new Error(`Failed to retrieve new releases page - got response code [${response.status}]`);
-		}
+	const $ = await http_request('https://global.bookwalker.jp/series/')
 
-		console.log('Successfully fetched page series list. Loading with Cheerio...')
-		const $ = cheerio.load(response.data)
-
-		const all_letters = $('ul.link-list')
-		for (const letter of all_letters) {
-			const $letter = $(letter)
-		
-			for (const item of $letter.children('li')) {
-				const $item = $(item)
-				const title = $item.text().trim()
-				if (title.startsWith('[AUDIOBOOK]')) {
-					continue
-				}
-				const series_type_match = /light novel|manga|art book/i.exec(title)
-				const series_type = series_type_match && series_type_match[0] ? series_type_match[0].toLowerCase() : 'manga'
-				// The demon regex and I don't have a licence!
-				const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))?$/ig.exec(title)
-				let series_title: string = ''
-				let isChapterSeries: boolean = false
-				if (series_title_main && series_title_main.groups) {
-					series_title = series_title_main.groups.title
-					// TODO includes case-sensitve?
-					if (series_title_main.groups.start?.toLowerCase().includes('chapter') || series_title_main.groups.end?.toLowerCase().includes('chapter')) {
-						isChapterSeries = true
-					}
-				}
-				const title_url_stub = $item.find('a').attr('href')
-				const title_url = title_url_stub ? new URL(`https://global.bookwalker.jp${title_url_stub}`) : null
-				const series_id = title_url?.pathname ? /\d+/.exec(title_url.pathname) : null
-				all_series.push({'title': series_title, 'url': title_url?.toString(), 'series_id': Number(series_id), 'type': series_type, 'isChapterSeries': isChapterSeries})
-				
+	const all_letters = $('ul.link-list')
+	for (const letter of all_letters) {
+		const $letter = $(letter)
+	
+		for (const item of $letter.children('li')) {
+			const $item = $(item)
+			const title = $item.text().trim()
+			if (title.startsWith('[AUDIOBOOK]')) {
+				continue
 			}
+			const series_type_match = /light novel|manga|art book/i.exec(title)
+			const series_type = series_type_match && series_type_match[0] ? series_type_match[0].toLowerCase() : 'manga'
+			// The demon regex and I don't have a licence!
+			const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))?$/ig.exec(title)
+			let series_title: string = ''
+			let isChapterSeries: boolean = false
+			if (series_title_main && series_title_main.groups) {
+				series_title = series_title_main.groups.title
+				// TODO includes case-sensitve?
+				if (series_title_main.groups.start?.toLowerCase().includes('chapter') || series_title_main.groups.end?.toLowerCase().includes('chapter')) {
+					isChapterSeries = true
+				}
+			}
+			const title_url_stub = $item.find('a').attr('href')
+			const title_url = title_url_stub ? new URL(`https://global.bookwalker.jp${title_url_stub}`) : null
+			const series_id = title_url?.pathname ? /\d+/.exec(title_url.pathname) : null
+			all_series.push({'title': series_title, 'url': title_url?.toString(), 'series_id': Number(series_id), 'type': series_type, 'isChapterSeries': isChapterSeries})
+			
 		}
-	return all_series
-	} catch (error: any) {
-		console.error('An error occurred during parsing:');
-		if (error.response) {
-				console.error(`Status: ${error.response.status}`);
-				console.error(`Data: ${JSON.stringify(error.response.data, null, 2)}`);
-		} else if (error instanceof Error) {
-				console.error(`Error: ${error.message}`);
-		} else {
-				console.error(error); // Fallback for unexpected error types
-		}
-		process.exit(1);
 	}
+	return all_series
 }
 
 export async function new_pending_releases_parge_page($: cheerio.CheerioAPI) {
@@ -102,32 +100,18 @@ export async function new_pending_releases() {
 	while (next_page) {
 		page += 1
 		try {
-				const response = await axios.get(`https://global.bookwalker.jp/categories/2/?order=release&np=1&page=${page.toString()}`, {
-						maxRedirects: 1,
-				});
-
-				if (response.status !== 200) {
-						throw new Error(`Failed to retrieve new releases page - got response code [${response.status}]`);
-				}
-
-				console.log(`Successfully fetched page ${page.toString()}. Loading with Cheerio...`)
-				const $ = cheerio.load(response.data)
-
-				const parsedData = await new_pending_releases_parge_page($)
-				all_releases.push(...parsedData['releases'])
-				next_page = parsedData['next_page']
-
+			const $ = await http_request(`https://global.bookwalker.jp/categories/2/?order=release&np=1&page=${page.toString()}`)
+			const parsedData = await new_pending_releases_parge_page($)
+			all_releases.push(...parsedData['releases'])
+			next_page = parsedData['next_page']
 		} catch (error: any) {
-				console.error('An error occurred during parsing:');
-				if (error.response) {
-						console.error(`Status: ${error.response.status}`);
-						console.error(`Data: ${JSON.stringify(error.response.data, null, 2)}`);
-				} else if (error instanceof Error) {
-						console.error(`Error: ${error.message}`);
-				} else {
-						console.error(error); // Fallback for unexpected error types
-				}
-				process.exit(1);
+			console.error('An error occurred during parsing:')
+			if (error instanceof Error) {
+				console.error(`Error: ${error.message}`)
+			} else {
+				console.error(error)
+			}
+			process.exit(1)
 		}
 	}
 	return all_releases

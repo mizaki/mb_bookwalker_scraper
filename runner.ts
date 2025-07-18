@@ -1,4 +1,4 @@
-import { all_series_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
+import { all_series_page_parse, all_publishers_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -16,7 +16,54 @@ async function saveJsonToFileAsync(data: any, path: string) {
   }
 }
 
-async function runParser(id: string, isVolume: boolean = true): Promise<void> {
+export async function http_request(url: string = ''): Promise<cheerio.CheerioAPI> {
+    try {
+        const response = await axios.get(url, {
+            maxRedirects: 1,
+        })
+
+        if (response.status !== 200) {
+            throw new Error(`Failed to retrieve the web page - got response code [${response.status}] for URL [${url}]`)
+        }
+
+        console.log('Successfully fetched URL. Loading with Cheerio...')
+        return cheerio.load(response.data)
+    } catch (error: any) {
+        console.error('An error occurred during parsing:')
+        if (error.response) {
+            console.error(`Status: ${error.response.status}`)
+            console.error(`Data: ${JSON.stringify(error.response.data, null, 2)}`)
+        } else if (error instanceof Error) {
+            console.error(`Error: ${error.message}`)
+        } else {
+            console.error(error)
+        }
+        process.exit(1)
+    }
+    
+}
+
+async function get_volume(id: string, isVolume: boolean = true): Promise<void> {
+    // Fetches volume/chapter information from (de)UUID webpage
+    if (!id) {
+        console.error('Usage: ts-node activate_parser.ts <ID>')
+        process.exit(1)
+    }
+
+    console.log(`Attempting to fetch and parse ID: ${id}`)
+    const url = 'https://global.bookwalker.jp/' + id
+
+    const $ = await http_request(url)
+
+    console.log(`Parsing page with ID: ${id}`)
+    const parsedData = await bwg_parse_page($, id, isVolume)
+
+    console.log('Parsing complete for ID: ${id}')
+    const file_path = './data/manga_' + id + '.json'
+    saveJsonToFileAsync(parsedData, file_path)
+}
+
+/*async function runParser(id: string, isVolume: boolean = true): Promise<void> {
     if (!id) {
         console.error('Usage: ts-node activate_parser.ts <ID>');
         process.exit(1);
@@ -55,7 +102,7 @@ async function runParser(id: string, isVolume: boolean = true): Promise<void> {
         }
         process.exit(1);
     }
-}
+}*/
 
 // Get the URL from command line arguments
 const cmd = process.argv[2];
@@ -63,7 +110,7 @@ const url = process.argv[3];
 const isVol = process.argv[4] ? Boolean(Number(process.argv[4])) : true;
 
 if (cmd == 'vol') {
-    runParser(url, isVol);
+    get_volume(url, isVol);
 } else if (cmd == 'new') {
     const new_releases = await new_pending_releases();
     const file_path = './data/manga_new_releases_' + Date.now().toString() + '.json'
@@ -76,4 +123,8 @@ if (cmd == 'vol') {
     const series_details = await bwg_parse_series_json(parseInt(url))
     const file_path = './data/manga_series_' + url + '.json'
     saveJsonToFileAsync(series_details, file_path)
+} else if (cmd == 'pubs') {
+    const publishers = await all_publishers_page_parse()
+    const file_path = './data/publishers_' + Date.now().toString() + '.json'
+    saveJsonToFileAsync(publishers, file_path)
 }
