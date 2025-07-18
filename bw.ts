@@ -15,6 +15,65 @@ import { number } from 'zod/v4'
 //import SourceAnimeNewsNetwork from '../models/SourceAnimeNewsNetwork.model'
 //import { Queue, QueueClient } from '../queue'
 
+export async function all_series_page_parse() {
+	const all_series: Record<string, any>[] = []
+	try {
+		const response = await axios.get(`https://global.bookwalker.jp/series/`, {
+				maxRedirects: 1,
+		});
+
+		if (response.status !== 200) {
+				throw new Error(`Failed to retrieve new releases page - got response code [${response.status}]`);
+		}
+
+		console.log('Successfully fetched page series list. Loading with Cheerio...')
+		const $ = cheerio.load(response.data)
+
+		const all_letters = $('ul.link-list')
+		for (const letter of all_letters) {
+			const $letter = $(letter)
+		
+			for (const item of $letter.children('li')) {
+				const $item = $(item)
+				const title = $item.text().trim()
+				if (title.startsWith('[AUDIOBOOK]')) {
+					continue
+				}
+				const series_type_match = /light novel|manga|art book/i.exec(title)
+				const series_type = series_type_match && series_type_match[0] ? series_type_match[0].toLowerCase() : 'manga'
+				// The demon regex and I don't have a licence!
+				const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))?$/ig.exec(title)
+				let series_title: string = ''
+				let isChapterSeries: boolean = false
+				if (series_title_main && series_title_main.groups) {
+					series_title = series_title_main.groups.title
+					// TODO includes case-sensitve?
+					if (series_title_main.groups.start?.toLowerCase().includes('chapter') || series_title_main.groups.end?.toLowerCase().includes('chapter')) {
+						isChapterSeries = true
+					}
+				}
+				const title_url_stub = $item.find('a').attr('href')
+				const title_url = title_url_stub ? new URL(`https://global.bookwalker.jp${title_url_stub}`) : null
+				const series_id = title_url?.pathname ? /\d+/.exec(title_url.pathname) : null
+				all_series.push({'title': series_title, 'url': title_url?.toString(), 'series_id': Number(series_id), 'type': series_type, 'isChapterSeries': isChapterSeries})
+				
+			}
+		}
+	return all_series
+	} catch (error: any) {
+		console.error('An error occurred during parsing:');
+		if (error.response) {
+				console.error(`Status: ${error.response.status}`);
+				console.error(`Data: ${JSON.stringify(error.response.data, null, 2)}`);
+		} else if (error instanceof Error) {
+				console.error(`Error: ${error.message}`);
+		} else {
+				console.error(error); // Fallback for unexpected error types
+		}
+		process.exit(1);
+	}
+}
+
 export async function new_pending_releases_parge_page($: cheerio.CheerioAPI) {
 	// Parse each new release until last_date and/or last_title OR no release date
 	const new_pending_releases: Record<string, any>[] = []
@@ -72,6 +131,54 @@ export async function new_pending_releases() {
 		}
 	}
 	return all_releases
+}
+
+export async function bwg_parse_series_json(series_id: number) {
+	// Fecthes all chapters/volumes from the JSON file endpoint
+	if (!series_id) {
+		return null
+	}
+
+	const series: Record<string, any>[] = []
+	const url: string = 'https://seriesinfo.bookwalker.jp/series_info_' + series_id.toString() + '_v2.json'
+	try {
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const data = await response.json()
+		for (const item of data['series_info']) {
+			if (!item['series_no']) {
+				continue
+			}
+			const title = item['productName']
+			const book_title = extract_title(title)
+			const image_url = `https://rimg.bookwalker.jp/${item['thumbnail_id']}/OWWPXNVne2Og5o9nA6tp3Q__.jpg`
+			const book_number = Number(item['series_no'])
+			const book_uuid = item['uuid']
+			const book_url = 'https://global.bookwalker.jp/de' + book_uuid
+			series.push({
+				'book_title': book_title,
+				'number': book_number,
+				'image': image_url,
+				'uuid': book_uuid,
+				'url': book_url
+			})
+		}
+
+    return series
+  } catch (error) {
+    console.error(`Error fetching series ${series_id.toString()} JSON:`, error instanceof Error ? error.message : error);
+    process.exit(1)
+  }
+}
+
+function extract_title(book_title: string, series_title: string = '') {
+	const book_title_clean = book_title.replace(series_title, '')
+	const title_chapter = /(?<=:\s).*?(?=,\s*chapter\s\d+)|(?<=chapter\s\d+:\s).*/i.exec(book_title_clean)
+	return title_chapter && title_chapter[0] ? title_chapter[0] : null
 }
 
 export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume: boolean = true) {
@@ -237,6 +344,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 		}
 
 		// Chapter possible title
+		// TODO use function extract_title
 		const series_title_top_text_chapter = /chapter\s\d+(?:\.\d+)?:\s(.*)\s-/i.exec(series_title_top_text)
 		data['title'] = series_title_top_text_chapter && series_title_top_text_chapter[1] ? series_title_top_text_chapter[1] : null
 	}

@@ -1,4 +1,4 @@
-import { bwg_parse_page, new_pending_releases } from './bw.js';
+import { all_series_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -68,4 +68,12 @@ if (cmd == 'vol') {
     const new_releases = await new_pending_releases();
     const file_path = './data/manga_new_releases_' + Date.now().toString() + '.json'
     saveJsonToFileAsync(new_releases, file_path)
+} else if (cmd == 'all_series') {
+    const all_series = await all_series_page_parse()
+    const file_path = './data/manga_all_series_' + Date.now().toString() + '.json'
+    saveJsonToFileAsync(all_series, file_path)
+} else if (cmd == 'series') {
+    const series_details = await bwg_parse_series_json(parseInt(url))
+    const file_path = './data/manga_series_' + url + '.json'
+    saveJsonToFileAsync(series_details, file_path)
 }
