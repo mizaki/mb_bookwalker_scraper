@@ -73,13 +73,13 @@ export async function all_series_page_parse() {
 			}
 			const series_type_match = /light novel|manga|art book/i.exec(title)
 			const series_type = series_type_match && series_type_match[0] ? series_type_match[0].toLowerCase() : 'manga'
+			// TODO use function
 			// The demon regex and I don't have a licence!
 			const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))?$/ig.exec(title)
 			let series_title: string = ''
 			let isChapterSeries: boolean = false
 			if (series_title_main && series_title_main.groups) {
 				series_title = series_title_main.groups.title
-				// TODO includes case-sensitve?
 				if (series_title_main.groups.start?.toLowerCase().includes('chapter') || series_title_main.groups.end?.toLowerCase().includes('chapter')) {
 					isChapterSeries = true
 				}
@@ -168,7 +168,7 @@ export async function bwg_parse_series_json(series_id: number) {
 			series.push({
 				'book_title': book_title,
 				'number': book_number,
-				'image': image_url,
+				'thumbnail': image_url,
 				'uuid': book_uuid,
 				'url': book_url
 			})
@@ -188,7 +188,6 @@ export async function bwg_parse_book_api(book_id: string) {
 	if (!book_id) {
 		return null
 	}
-
 	const book: Record<string, any>[] = []
 	const url: string = `https://member-app.bookwalker.jp/api/books/updates?fileType=EPUB&${book_id}=0`
 	try {
@@ -200,9 +199,18 @@ export async function bwg_parse_book_api(book_id: string) {
 
     const data = await response.json()
 		for (const item of data) {
+			const series_title_details = clean_series_title(item['seriesName'])
+
 			const title = item['productName']
-			const series_title = item['seriesName']
+			const series_title = series_title_details['series_title']
+			let series_title_kana = null
+			// Can't trust the 'kana' to have kana...
+			const count_non_latin_match = item['seriesNameKana'].match(/[^\x00-\x7F]/g)
+			if (count_non_latin_match !== null && count_non_latin_match.length > 0) {
+				series_title_kana = item['seriesNameKana'].replace('チャプターシリアルズ', '').replace('チャプターリリース', '')  // chapter release/chapter serials
+			}
 			const series_id = item['seriesId']
+			const is_chapter = series_title_details['is_chapter']
 			const book_title = extract_title(title, series_title)
 			const image_thumb_url = item['thumbnailImageUrl']
 			const image_url = item['coverImageUrl']
@@ -245,6 +253,10 @@ export async function bwg_parse_book_api(book_id: string) {
 				}
 			}
 			book.push({
+				'series_title': series_title,
+				'series_title_kana': series_title_kana,
+				'series_id': series_id,
+				'is_chapter': is_chapter,
 				'book_title': book_title,
 				'number': book_number,
 				'image': image_url,
@@ -253,7 +265,6 @@ export async function bwg_parse_book_api(book_id: string) {
 				'url': book_url,
 				...authors,
 				'description': description,
-				'series_id': series_id,
 				'publisher': publisher,
 				'type': type
 			})
@@ -264,6 +275,20 @@ export async function bwg_parse_book_api(book_id: string) {
     console.error(`Error fetching book ${book_id.toString()} JSON:`, error instanceof Error ? error.message : error);
     process.exit(1)
   }
+}
+
+function clean_series_title(series_title: string): Record<string, any> {
+	// The demon regex and I don't have a licence!
+	const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))?$/ig.exec(series_title)
+	let series_title_clean: string = ''
+	let isChapterSeries: boolean = false
+	if (series_title_main && series_title_main.groups) {
+		series_title_clean = series_title_main.groups.title
+		if (series_title_main.groups.start?.toLowerCase().includes('chapter') || series_title_main.groups.end?.toLowerCase().includes('chapter')) {
+			isChapterSeries = true
+		}
+	}
+	return {'series_title': series_title_clean, 'is_chapter': isChapterSeries}
 }
 
 function extract_title(book_title: string, series_title: string = '') {
@@ -337,7 +362,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string) {
 	const data: Record<string, any> = {}
 	data['id'] = normalise_uuid(id)
 	data['url'] = 'https://global.bookwalker.jp/de' + id
-	data['cover'] = $('div.book-img img').attr('src') // Need to hash to check for "Now printing"?
+	data['thumbnail'] = $('div.book-img img').attr('src') // Need to hash to check for "Now printing"?
 	data['genres'] = []
 	data['writer'] = []
 	data['artist'] = []
@@ -482,6 +507,53 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string) {
 	return BookWalkerGlobalMangaBakaSeries.strict().parse(series_data)
 }
 
+export async function full_series_data(series_id: number) {
+	if (!series_id) {
+		console.log('Missing required series ID')
+		process.exit(1)
+	}
+	const data: Record<string, any> = {}
+	const series_books = await bwg_parse_series_json(series_id)
+
+	if (series_books === null) {
+		console.log('No books found!')
+		process.exit(1)
+	}
+
+	// Use the first volume/chapter for further info
+	// First book might not be first volume/chapter
+	for (const book of series_books) {
+		if (book['number'] == 1) {
+			const book_info = await bwg_parse_book_api(book['uuid'])
+
+			if (book_info !== null && book_info.length > 0) {
+				data['series_id'] = series_id
+				data['is_chapter_series'] = book_info[0]['is_chapter']
+				data['cover'] = book_info[0]['image']
+				data['thumbnail'] = book['thumbnail']
+				data['series_title'] = book_info[0]['series_title']
+				data['series_title_ja'] = book_info[0]['series_title_kana']
+				//data['series_title_ja_en'] = book_info[0]['']
+				data['writer'] = book_info[0]['writer']
+				data['design'] = book_info[0]['design']
+				data['artist'] = book_info[0]['artist']
+				data['letterer'] = book_info[0]['letterer']
+				data['translator'] = book_info[0]['translator']
+				data['complied'] = book_info[0]['complied']
+				data['distributor'] = book_info[0]['distributor']
+				data['description'] = book_info[0]['description']
+
+				if (book_info[0]['is_chapter']) {
+					data['chapter_count'] = series_books.length
+				} else {
+					data['volume_count'] = series_books.length
+				}
+			}
+			break
+		}
+	}
+	return data
+}
 /*
 export function worker_produce(worker: QueueClient) {
 	//const log = Logger.label('ann_news_schedule_refresh')

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { fa } from 'zod/v4/locales'
 
 function null_array<T extends z.ZodTypeAny>(schema: T) {
   return z.array(schema).transform((val) => (val.length === 0 ? null : val))
@@ -72,12 +73,26 @@ const chapter = z.object({
 
 export const BookWalkerGlobalMangaBakaSeries = z.object({
 	series_id: z.number(),
+	is_chapter_series: z.boolean().default(false),
 	series_title: z.string(),
 	series_alt_title: z.string().nullish(), // Alternative Title
 	series_title_ja: z.string().nullish(), // Japanese Title, Can have romaji in <span>
 	series_title_ja_en: z.string().nullish(),
 	type: z.enum(['manga', 'light novel', 'art book']),
-	//cover: z.string().url().nullish(),
+	volume_count: z.number().nullish(),
+	chapter_count: z.number().nullish(),
+	cover: z.string().url().nullish(),
+	thumbnail: z.string().url().nullish(),
+	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)
+	design: null_array(staff).nullish(), // Designed by, Character Design,
+	artist: null_array(staff).nullish(), // Illustrated by, Artist, Art, By (artist)
+	letterer: null_array(staff).nullish(), // Letterer
+	translator: null_array(staff).nullish(), // Translated by
+	complied: null_array(staff).nullish(), // Compiled by
+	distributor: z.string().nullish(),
+	genres: null_array(z.string()).nullish(),
+	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
+	description: z.string().nullish(),
 	volume: volume.nullish(),
 	chapter: chapter.nullish(),
 })

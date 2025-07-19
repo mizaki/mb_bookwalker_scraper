@@ -1,4 +1,4 @@
-import { all_series_page_parse, all_publishers_page_parse, all_authors_page_parse, bwg_parse_book_api, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
+import { all_series_page_parse, all_publishers_page_parse, all_authors_page_parse, bwg_parse_book_api, bwg_parse_page, bwg_parse_series_json, full_series_data, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -121,6 +121,10 @@ if (cmd == 'book') {
 } else if (cmd == 'series') {
     const series_details = await bwg_parse_series_json(parseInt(url))
     const file_path = './data/manga_series_' + url + '.json'
+    saveJsonToFileAsync(series_details, file_path)
+} else if (cmd == 'full_series') {
+    const series_details = await full_series_data(parseInt(url))
+    const file_path = './data/series_full_' + url + '.json'
     saveJsonToFileAsync(series_details, file_path)
 } else if (cmd == 'book_api') {
     const book_details = await bwg_parse_book_api(url)
