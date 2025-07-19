@@ -1,4 +1,4 @@
-import { all_series_page_parse, all_publishers_page_parse, all_authors_page_parse, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
+import { all_series_page_parse, all_publishers_page_parse, all_authors_page_parse, bwg_parse_book_api, bwg_parse_page, bwg_parse_series_json, new_pending_releases } from './bw.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { writeFile } from 'fs/promises';
@@ -109,7 +109,7 @@ const cmd = process.argv[2];
 const url = process.argv[3];
 const isVol = process.argv[4] ? Boolean(Number(process.argv[4])) : true;
 
-if (cmd == 'vol') {
+if (cmd == 'book') {
     get_volume(url, isVol);
 } else if (cmd == 'new') {
     const new_releases = await new_pending_releases();
@@ -123,6 +123,10 @@ if (cmd == 'vol') {
     const series_details = await bwg_parse_series_json(parseInt(url))
     const file_path = './data/manga_series_' + url + '.json'
     saveJsonToFileAsync(series_details, file_path)
+} else if (cmd == 'book_api') {
+    const book_details = await bwg_parse_book_api(url)
+    const file_path = './data/book_' + url + '.json'
+    saveJsonToFileAsync(book_details, file_path)
 } else if (cmd == 'pubs') {
     const publishers = await all_publishers_page_parse()
     const file_path = './data/publishers_' + Date.now().toString() + '.json'

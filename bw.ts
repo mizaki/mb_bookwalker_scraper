@@ -181,6 +181,91 @@ export async function bwg_parse_series_json(series_id: number) {
   }
 }
 
+export async function bwg_parse_book_api(book_id: string) {
+	// Fecthes book(s) details from API endpoint. API supports multiple UUIDs
+	// productTypeCode: 1 = eBook
+	// categoryId: 1 = , 2 = Manga, 3 = Light Novel
+	if (!book_id) {
+		return null
+	}
+
+	const book: Record<string, any>[] = []
+	const url: string = `https://member-app.bookwalker.jp/api/books/updates?fileType=EPUB&${book_id}=0`
+	try {
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const data = await response.json()
+		for (const item of data) {
+			const title = item['productName']
+			const series_title = item['seriesName']
+			const series_id = item['seriesId']
+			const book_title = extract_title(title, series_title)
+			const image_thumb_url = item['thumbnailImageUrl']
+			const image_url = item['coverImageUrl']
+			const book_number = Number(item['seriesNo'])
+			const book_uuid = item['uuid']
+			const book_url = 'https://global.bookwalker.jp/de' + book_uuid
+			const publisher = item['companyName']
+			const description = item['productExplanationDetails']
+			const type = item['comicFlag'] ? 'manga' : 'light novel'
+
+			const authors: Record<string, string> = {}
+			for (const author of item['authors']) {
+				switch (author['authorTypeName']) {
+					case 'Author':
+					case 'By (author)':
+					case 'Writer':
+					case 'Story':
+					case 'Original Work':
+						authors['writer'] = author['authorName']
+						break
+					case 'Artist':
+					case 'Art':
+					case 'By (artist)':
+					case 'Illustrated by':
+						authors['artist'] = author['authorName']
+						break
+					case 'Designed by':
+					case 'Character Design':
+						authors['design'] = author['authorName']
+						break
+					case 'Letterer':
+						authors['letterer'] = author['authorName']
+						break
+					case 'Translated by':
+						authors['translator'] = author['authorName']
+						break
+					case 'Compiled by':
+						authors['compiled'] = author['authorName']
+						break
+				}
+			}
+			book.push({
+				'book_title': book_title,
+				'number': book_number,
+				'image': image_url,
+				'image_thumb': image_thumb_url,
+				'uuid': book_uuid,
+				'url': book_url,
+				...authors,
+				'description': description,
+				'series_id': series_id,
+				'publisher': publisher,
+				'type': type
+			})
+		}
+
+    return book
+  } catch (error) {
+    console.error(`Error fetching book ${book_id.toString()} JSON:`, error instanceof Error ? error.message : error);
+    process.exit(1)
+  }
+}
+
 function extract_title(book_title: string, series_title: string = '') {
 	const book_title_clean = book_title.replace(series_title, '')
 	const title_chapter = /(?<=:\s).*?(?=,\s*chapter\s\d+)|(?<=chapter\s\d+:\s).*/i.exec(book_title_clean)
