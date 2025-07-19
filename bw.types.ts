@@ -23,6 +23,7 @@ const distributor = z.object({
 
 const volume = z.object({
 	id: z.string(),
+	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
 	title: z.string().nullish(),
 	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)
@@ -47,6 +48,7 @@ const volume = z.object({
 // https://global.bookwalker.jp/series/451829/
 const chapter = z.object({
 	id: z.string(),
+	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
 	title: z.string().nullish(),
 	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)

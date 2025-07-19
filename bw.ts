@@ -11,7 +11,7 @@ import { http_request } from './runner.js'
 import type { Job } from 'pg-boss'
 import { ja, no, tr } from 'zod/v4/locales'
 import { AnyNode } from 'domhandler'
-import { number } from 'zod/v4'
+import { number, uuid } from 'zod/v4'
 //import parser from 'xml2json'
 //import SourceAnimeNewsNetwork from '../models/SourceAnimeNewsNetwork.model'
 //import { Queue, QueueClient } from '../queue'
@@ -268,12 +268,31 @@ export async function bwg_parse_book_api(book_id: string) {
 
 function extract_title(book_title: string, series_title: string = '') {
 	const book_title_clean = book_title.replace(series_title, '')
-	const title_chapter = /(?<=:\s).*?(?=,\s*chapter\s\d+)|(?<=chapter\s\d+:\s).*/i.exec(book_title_clean)
-	return title_chapter && title_chapter[0] ? title_chapter[0] : null
+	const title_chapter = /(?<=:\s).*?(?=,\s*chapter\s\d+)|(?<=chapter\s\d+:\s)(.*)(?:\s-.*)/i.exec(book_title_clean)
+	return title_chapter && title_chapter[1] ? title_chapter[1] : null
 }
 
-export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume: boolean = true) {
-	// TODO detect chapter/volume?
+function normalise_uuid(uuid: string = ''): string | null {
+	// The website adds 'de' to the start of the UUID because...
+	if (!uuid) {
+		return null
+	}
+
+	const uuid_split = uuid.split('-')
+	if (uuid_split[0].length == 8) {
+		return uuid
+	} else {
+		if (uuid_split[0].length == 10 && uuid.startsWith('de')) {
+			return uuid.slice(2)
+		}
+	}
+
+	return null
+}
+
+export async function bwg_parse_page($: cheerio.CheerioAPI, id: string) {
+	const is_chapter = $('.detail-book-title .tag-list .tag-chapter, .tag-simulpub')?.[0] ? true : false
+
 	function gen_staff(staff_info: any) {
 		const staffs: Record<string, any>[] = []
 		staff_info.children('td').children('a').each((idx: number, staff: any) => {
@@ -316,7 +335,8 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 	}
 
 	const data: Record<string, any> = {}
-	data['id'] = id
+	data['id'] = normalise_uuid(id)
+	data['url'] = 'https://global.bookwalker.jp/de' + id
 	data['cover'] = $('div.book-img img').attr('src') // Need to hash to check for "Now printing"?
 	data['genres'] = []
 	data['writer'] = []
@@ -383,7 +403,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 						if (g == 'Mature') {
 							data['maturity_rating'] = 'Mature'
 						}
-						if (!isVolume && g == 'V-Scroll Comics') {
+						if (is_chapter && g == 'V-Scroll Comics') {
 							data['vscroll'] = true
 						}
 					}
@@ -409,8 +429,17 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 
 	data['description'] = $('p.synopsis-text').text().trim()
 	
-	if (isVolume) {
-		const series_title_top_text_match = series_title_top_text.match(/.*\svol.*?\s(\d+)|(\d+)/i)
+	if (is_chapter) {
+		const series_title_top_text_match = series_title_top_text.match(/(?:.*\schapter\s|.*\s#)(\d+.\d+|\d+)/i)
+		if (series_title_top_text_match && series_title_top_text_match[1]) {
+			data['chapter'] = series_title_top_text_match[1]
+		} else {
+			data['chapter'] = 1 // default to 1
+		}
+
+		data['title'] = extract_title(series_title_top_text, series_data['series_title'])
+	} else {
+		const series_title_top_text_match = series_title_top_text.match(/.*\svol.*?\s(\d+)|(\d+)/i) // possible 1.5?
 		// Volume format can be "Volume n" or "Vol. n" or just a number
 		if (series_title_top_text_match && series_title_top_text_match[1]) {
 			data['volume'] = series_title_top_text_match[1]
@@ -420,24 +449,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 			data['volume'] = 1 // default to 1
 		}
 
-		// Volume possible title
-		// TODO Use already grabbed series title to reduce string
-		const series_title_top_text_split = series_title_top_text[0].split(' - ')
-		data['title'] = series_title_top_text_split[1] ? series_title_top_text_split[1] : null
-	} else {
-		const series_title_top_text_match = series_title_top_text.match(/.*\schapter\s(\d+\.\d+|\d+)/i)
-		if (series_title_top_text_match && series_title_top_text_match[1]) {
-			data['chapter'] = series_title_top_text_match[1]
-		} else if (series_title_top_text_match && series_title_top_text_match[2]) {
-			data['chapter'] = series_title_top_text_match[2]
-		} else {
-			data['chapter'] = 1 // default to 1
-		}
-
-		// Chapter possible title
-		// TODO use function extract_title
-		const series_title_top_text_chapter = /chapter\s\d+(?:\.\d+)?:\s(.*)\s-/i.exec(series_title_top_text)
-		data['title'] = series_title_top_text_chapter && series_title_top_text_chapter[1] ? series_title_top_text_chapter[1] : null
+		data['title'] = extract_title(series_title_top_text, series_data['series_title'])
 	}
 	
 
@@ -462,10 +474,10 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, id: string, isVolume
 	}
 	data['rating'] = star_count
 
-	if (isVolume) {
-		series_data['volume'] = data
-	} else {
+	if (is_chapter) {
 		series_data['chapter'] = data
+	} else {
+		series_data['volume'] = data
 	}
 	return BookWalkerGlobalMangaBakaSeries.strict().parse(series_data)
 }

@@ -43,7 +43,7 @@ export async function http_request(url: string = ''): Promise<cheerio.CheerioAPI
     
 }
 
-async function get_volume(id: string, isVolume: boolean = true): Promise<void> {
+async function get_volume(id: string): Promise<void> {
     // Fetches volume/chapter information from (de)UUID webpage
     if (!id) {
         console.error('Usage: ts-node activate_parser.ts <ID>')
@@ -51,12 +51,12 @@ async function get_volume(id: string, isVolume: boolean = true): Promise<void> {
     }
 
     console.log(`Attempting to fetch and parse ID: ${id}`)
-    const url = 'https://global.bookwalker.jp/' + id
+    const url = 'https://global.bookwalker.jp/de' + id
 
     const $ = await http_request(url)
 
     console.log(`Parsing page with ID: ${id}`)
-    const parsedData = await bwg_parse_page($, id, isVolume)
+    const parsedData = await bwg_parse_page($, id)
 
     console.log('Parsing complete for ID: ${id}')
     const file_path = './data/manga_' + id + '.json'
@@ -105,12 +105,11 @@ async function get_volume(id: string, isVolume: boolean = true): Promise<void> {
 }*/
 
 // Get the URL from command line arguments
-const cmd = process.argv[2];
-const url = process.argv[3];
-const isVol = process.argv[4] ? Boolean(Number(process.argv[4])) : true;
+const cmd = process.argv[2]
+const url = process.argv[3]
 
 if (cmd == 'book') {
-    get_volume(url, isVol);
+    get_volume(url);
 } else if (cmd == 'new') {
     const new_releases = await new_pending_releases();
     const file_path = './data/manga_new_releases_' + Date.now().toString() + '.json'

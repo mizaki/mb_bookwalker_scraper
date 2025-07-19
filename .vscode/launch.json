@@ -9,8 +9,7 @@
       "program": "${workspaceFolder}/dist/runner.js", // Path to the compiled JS file (adjust 'dist' if different)
       "args": [
         "${input:cmdInput}"
-        "${input:urlInput}", // This will prompt you for the URL
-        "${input:volInput}"
+        "${input:urlInput}",
       ],
       "console": "integratedTerminal", // Output in VS Code's integrated terminal
       "internalConsoleOptions": "neverOpen",
@@ -35,12 +34,6 @@
       "type": "promptString",
       "description": "Enter the ID to parse:",
       "default": "de51c00cf5-039a-4495-ae24-6a64bd02abfc"
-    },
-    {
-      "id": "volInput",
-      "type": "promptString",
-      "description": "isVolume:",
-      "default": "1"
     }
   ]
 }
