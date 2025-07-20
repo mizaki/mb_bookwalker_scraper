@@ -11,8 +11,8 @@ const currency = z.object({
 })
 
 const staff = z.object({
-	id: z.number(),
-	link: z.string().url(),
+	id: z.number().nullish(),
+	role: z.string(),
 	name: z.string().nullish(),
 })
 
@@ -23,7 +23,7 @@ const distributor = z.object({
 })
 
 const volume = z.object({
-	id: z.string(),
+	uuid: z.string(),
 	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
 	title: z.string().nullish(),
@@ -48,16 +48,11 @@ const volume = z.object({
 
 // https://global.bookwalker.jp/series/451829/
 const chapter = z.object({
-	id: z.string(),
+	uuid: z.string(),
 	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
 	title: z.string().nullish(),
-	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)
-	design: null_array(staff).nullish(), // Designed by, Character Design,
-	artist: null_array(staff).nullish(), // Illustrated by, Artist, Art, By (artist)
-	letterer: null_array(staff).nullish(), // Letterer
-	translator: null_array(staff).nullish(), // Translated by
-	complied: null_array(staff).nullish(), // Compiled by
+	staff: null_array(staff).nullish(),
 	distributor: distributor,
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
@@ -78,17 +73,13 @@ export const BookWalkerGlobalMangaBakaSeries = z.object({
 	series_alt_title: z.string().nullish(), // Alternative Title
 	series_title_ja: z.string().nullish(), // Japanese Title, Can have romaji in <span>
 	series_title_ja_en: z.string().nullish(),
+	url: z.string().url().nullish(),
 	type: z.enum(['manga', 'light novel', 'art book']),
 	volume_count: z.number().nullish(),
 	chapter_count: z.number().nullish(),
 	cover: z.string().url().nullish(),
 	thumbnail: z.string().url().nullish(),
-	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)
-	design: null_array(staff).nullish(), // Designed by, Character Design,
-	artist: null_array(staff).nullish(), // Illustrated by, Artist, Art, By (artist)
-	letterer: null_array(staff).nullish(), // Letterer
-	translator: null_array(staff).nullish(), // Translated by
-	complied: null_array(staff).nullish(), // Compiled by
+	staff: null_array(staff).nullish(),
 	distributor: z.string().nullish(),
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
