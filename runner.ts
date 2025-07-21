@@ -132,10 +132,10 @@ if (cmd == 'book') {
     saveJsonToFileAsync(book_details, file_path)
 } else if (cmd == 'pubs') {
     const publishers = await all_publishers_page_parse()
-    const file_path = './data/publishers_' + Date.now().toString() + '.json'
+    const file_path = './data/publishers.json'
     saveJsonToFileAsync(publishers, file_path)
 } else if (cmd == 'authors') {
     const authors = await all_authors_page_parse()
-    const file_path = './data/authors_' + Date.now().toString() + '.json'
+    const file_path = './data/authors.json'
     saveJsonToFileAsync(authors, file_path)
 }

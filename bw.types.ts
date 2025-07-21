@@ -14,6 +14,7 @@ const staff = z.object({
 	id: z.number().nullish(),
 	role: z.string(),
 	name: z.string().nullish(),
+	link: z.string().url().nullish(),
 })
 
 const distributor = z.object({
@@ -80,7 +81,7 @@ export const BookWalkerGlobalMangaBakaSeries = z.object({
 	cover: z.string().url().nullish(),
 	thumbnail: z.string().url().nullish(),
 	staff: null_array(staff).nullish(),
-	distributor: z.string().nullish(),
+	distributor: distributor,
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),

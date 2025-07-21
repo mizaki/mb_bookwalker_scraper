@@ -5,6 +5,7 @@ import { BookWalkerGlobalMangaBakaSeries } from './bw.types.js'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
 import { http_request } from './runner.js'
+import { readFile } from 'fs/promises'
 //import tracer, { type TraceOptions } from 'dd-trace'
 //import { kinds } from 'dd-trace/ext'
 //import tags from 'dd-trace/ext/tags'
@@ -207,36 +208,57 @@ export async function bwg_parse_book_api(book_id: string): Promise<Record<string
 			const series_id = item['seriesId']
 			const is_chapter = series_title_details['is_chapter']
 			const book_title = extract_title(title, series_title)
+			const publisher = await pub_name_link_to_id(item['companyName'])
 
 			// TODO connect to table to name>ID for authors and publisher
+			// Use files for now
 			const authors: Record<string, string> = {}
 			for (const author of item['authors']) {
+				let staff_item = null
 				switch (author['authorTypeName']) {
 					case 'Author':
 					case 'By (author)':
 					case 'Writer':
 					case 'Story':
 					case 'Original Work':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'writer'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'writer'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'writer'})
 						break
 					case 'Artist':
 					case 'Art':
 					case 'By (artist)':
 					case 'Illustrated by':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'artist'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'artist'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'writer'})
 						break
 					case 'Designed by':
 					case 'Character Design':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'design'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'writer'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'design'})
 						break
 					case 'Letterer':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'letterer'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'writer'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'letterer'})
 						break
 					case 'Translated by':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'translator'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'writer'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'translator'})
 						break
 					case 'Compiled by':
-						staff.push({'name': author['authorName'], 'id': null, 'role': 'complied'})
+						staff_item = await author_name_link_to_id(author['authorName'])
+						staff.push(staff_item !== null ?
+							{...staff_item, 'role': 'writer'} :
+							{'id': null, 'name': author['authorName'], 'link': null, 'role': 'complied'})
 						break
 				}
 			}
@@ -254,7 +276,7 @@ export async function bwg_parse_book_api(book_id: string): Promise<Record<string
 				'url': 'https://global.bookwalker.jp/de' + item['uuid'],
 				'staff': staff,
 				'description': item['productExplanationDetails'],
-				'publisher': item['companyName'],
+				'publisher': publisher !== null ? publisher : {'id': null, 'name': item['companyName'], 'link': null},
 				'type': item['comicFlag'] ? 'manga' : 'light novel'
 			})
 		}
@@ -269,7 +291,7 @@ export async function bwg_parse_book_api(book_id: string): Promise<Record<string
 
 function clean_series_title(series_title: string): Record<string, any> {
 	// The demon regex and I don't have a licence!
-	const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)[,-]?(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*))/i.exec(series_title)
+	const series_title_main = /^(?<start><[^>]*>\s*)?(?<title>.*?)[,-]?(?:\s*(?<end>\(.*\)|（.*）|chapter.*|manga.*|vol.*?))/i.exec(series_title)
 	let series_title_clean: string = ''
 	let isChapterSeries: boolean = false
 	if (series_title_main && series_title_main.groups) {
@@ -285,6 +307,54 @@ function extract_title(book_title: string, series_title: string = '') {
 	const book_title_clean = book_title.replace(series_title, '')
 	const title_chapter = /(?<=:\s).*?(?=,\s*chapter\s\d+)|(?<=chapter\s\d+:\s)(.*)(?:\s-.*)/i.exec(book_title_clean)
 	return title_chapter && title_chapter[1] ? title_chapter[1] : null
+}
+
+async function author_name_link_to_id(author_name: string): Promise<Record<string, string> | null> {
+	const author_path = new URL('.././data/authors.json', import.meta.url)
+	try {
+		const authors = JSON.parse(await readFile(author_path, { encoding: 'utf8' }))
+
+		const author = authors.find(
+			(author: { author_id: number, author_name: string, author_url: string }) => 
+				author.author_name === author_name)
+
+		if (!author) {
+			return null
+		}
+
+		return {
+			id: author.author_id,
+			name: author.author_name,
+			link: author.author_url
+		}
+	}
+	catch (error) {
+		console.log('Failed to load authors.json from ', author_path)
+	}
+	return null
+}
+
+async function pub_name_link_to_id(pub_name: string): Promise<Record<string, string> | null> {
+	const pub_path = new URL('.././data/publishers.json', import.meta.url)
+	try {
+		const publishers = JSON.parse(await readFile(pub_path, { encoding: 'utf8' }))
+
+		const publisher = publishers.find((pub: { publisher_id: number, publisher_name: string, publisher_url: string }) => pub.publisher_name === pub_name);
+
+		if (!publisher) {
+			return null
+		}
+
+		return {
+			id: publisher.publisher_id,
+			name: publisher.publisher_name,
+			link: publisher.publisher_url
+		}
+	}
+	catch (error) {
+		console.log('Failed to load publishers.json from ', pub_path)
+	}
+	return null
 }
 
 function normalise_uuid(uuid: string = ''): string | null {
@@ -319,6 +389,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 					'id': Number(staff_id),
 					'name': staff_name,
 					'role': role,
+					'link': staff_href
 				})
 			}
 		})
@@ -441,7 +512,6 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 
 		data['title'] = extract_title(series_title_top_text, series_data['series_title'])
 	} else {
-		// TODO
 		const series_title_top_text_match = series_title_top_text.match(/.*\svol.*?\s(\d+)|(\d+)/i)
 		// Volume format can be "Volume n" or "Vol. n" or just a number (also within brackets)
 		if (series_title_top_text_match && series_title_top_text_match[1]) {
@@ -506,6 +576,7 @@ export async function full_series_data(series_id: number) {
 			data['series_id'] = series_id
 			data['series_title'] = book_info[0]['series_title']
 			data['series_title_ja'] = book_info[0]['series_title_kana']
+			// TODO Some kind of post-process to find the volume series id to link/merge
 			data['is_chapter_series'] = book_info[0]['is_chapter']
 			data['url'] = 'https://global.bookwalker.jp/series/' + series_id
 			data['type'] = book_info[0]['type']
