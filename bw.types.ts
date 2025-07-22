@@ -34,42 +34,40 @@ const volume = z.object({
 	letterer: null_array(staff).nullish(), // Letterer
 	translator: null_array(staff).nullish(), // Translated by
 	complied: null_array(staff).nullish(), // Compiled by
-	distributor: distributor,
+	distributor: distributor.nullish(),
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),
-	//edition: z.string().nullish(),
 	volume: z.string().nullish(),
 	date: z.coerce.date().nullish(),
 	price: currency.nullish(),
-	rating: z.number(), // 5/5
+	rating: z.number().nullish(), // 5/5
 	pages: z.number().nullish(),
 	chapters_inc: null_array(z.string()).nullish(),
 })
 
-// https://global.bookwalker.jp/series/451829/
 const chapter = z.object({
 	uuid: z.string(),
 	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
 	title: z.string().nullish(),
 	staff: null_array(staff).nullish(),
-	distributor: distributor,
+	distributor: distributor.nullish(),
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),
-	//edition: z.string().nullish(),
 	chapter: z.string().nullish(),
 	date: z.coerce.date().nullish(),
 	price: currency.nullish(),
-	rating: z.number(), // 5/5
+	rating: z.number().nullish(), // 5/5
 	pages: z.number().nullish(),
-	vscroll: z.boolean().default(false)
+	vscroll: z.boolean().default(false).nullish()
 })
 
 export const BookWalkerGlobalMangaBakaSeries = z.object({
 	series_id: z.number(),
 	is_chapter_series: z.boolean().default(false),
+	series_linked_id: z.number().nullish(), // A series can have a volume and chapter series id
 	series_title: z.string(),
 	series_alt_title: z.string().nullish(), // Alternative Title
 	series_title_ja: z.string().nullish(), // Japanese Title, Can have romaji in <span>
@@ -85,8 +83,8 @@ export const BookWalkerGlobalMangaBakaSeries = z.object({
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),
-	volume: volume.nullish(),
-	chapter: chapter.nullish(),
+	volumes: null_array(volume).nullish(),
+	chapters: null_array(chapter).nullish(),
 })
 
 export type BookWalkerGlobalMangaBakaSeries = z.infer<typeof BookWalkerGlobalMangaBakaSeries>

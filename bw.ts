@@ -466,6 +466,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 				data['distributor']['name'] = $detail.children('td').text().trim()
 				data['distributor']['link'] = pub_link
 				data['distributor']['id'] = pub_id ? Number(pub_id) : null
+				series_data['distributor'] = data['distributor']
 				break
 			case 'Genre':
 				const genres: string[] = $detail.children('td').text().trim().replace(/\s\s/g, '').split(',')
@@ -594,10 +595,22 @@ export async function full_series_data(series_id: number) {
 			} else {
 				data['volume_count'] = series_books[series_books.length - 1]['number']
 			}
+
+			data['chapters'] = []
+			data['volumes'] = []
 		}
 		
 	}
 	
+	// Add the book UUIDs for later retrieval
+	for (const book of series_books) {
+		if (data['is_chapter_series']) {
+			data['chapters'].push({'uuid': book['uuid']})
+		} else {
+			data['volumes'].push({'uuid': book['uuid']})
+		}
+	}
+
 	return BookWalkerGlobalMangaBakaSeries.parse(data)
 }
 /*
