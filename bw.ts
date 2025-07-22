@@ -175,15 +175,15 @@ export async function bwg_parse_series_json(series_id: number): Promise<Record<s
   }
 }
 
-export async function bwg_parse_book_api(book_id: string): Promise<Record<string, any>[] | null> {
+export async function bwg_parse_book_api(book_ids: string[]): Promise<Record<string, any> | null> {
 	// Fecthes book(s) details from API endpoint. API supports multiple UUIDs
+	// We presume all are for the same series ID!
 	// productTypeCode: 1 = eBook
 	// categoryId: 1 = , 2 = Manga, 3 = Light Novel
-	if (!book_id) {
+	if (!book_ids) {
 		return null
 	}
-	const book: Record<string, any>[] = []
-	const url: string = `https://member-app.bookwalker.jp/api/books/updates?fileType=EPUB&${book_id}=0`
+	const url: string = `https://member-app.bookwalker.jp/api/books/updates?fileType=EPUB${book_ids.map(id => `&${id}=0`).join('')}`
 	try {
     const response = await fetch(url)
 
@@ -193,23 +193,42 @@ export async function bwg_parse_book_api(book_id: string): Promise<Record<string
 
     const data = await response.json()
 
+		const series_data: Record<string, any> = {}
+		const books: Record<string, any>[] = []
 		const staff: Record<string, any>[] = []
 
-		for (const item of data) {
-			const title = item['productName']
-			const series_title_details = clean_series_title(title)
-			const series_title = series_title_details['series_title']
-			let series_title_kana = null
-			// Can't trust the 'kana' to have kana...
-			const count_non_latin_match = item['seriesNameKana'].match(/[^\x00-\x7F]/g)
-			if (count_non_latin_match !== null && count_non_latin_match.length > 0) {
-				series_title_kana = item['seriesNameKana'].replace('チャプターシリアルズ', '').replace('チャプターリリース', '')  // chapter release/chapter serials
-			}
-			const series_id = item['seriesId']
-			const is_chapter = series_title_details['is_chapter']
-			const book_title = extract_title(title, series_title)
-			const publisher = await pub_name_link_to_id(item['companyName'])
+		// Grab series data from first record
+		const title = data[0]['productName']
+		const series_title_details = clean_series_title(title)
+		//const series_title = series_title_details['series_title']
+		let series_title_kana = null
+		// Can't trust the 'kana' to have kana...
+		const count_non_latin_match = data[0]['seriesNameKana'].match(/[^\x00-\x7F]/g)
+		if (count_non_latin_match !== null && count_non_latin_match.length > 0) {
+			series_title_kana = data[0]['seriesNameKana'].replace('チャプターシリアルズ', '').replace('チャプターリリース', '')  // chapter release/chapter serials
+		}
+		//const series_id = item['seriesId']
+		//const is_chapter = series_title_details['is_chapter']
+		//const publisher = await pub_name_link_to_id(data[0]['companyName'])
 
+		series_data['series_id'] = Number(data[0]['seriesId'])
+		series_data['is_chapter_series'] = series_title_details['is_chapter']
+		series_data['series_title'] = series_title_details['series_title']
+		series_data['series_title_ja'] = series_title_kana
+		series_data['url'] = 'https://global.bookwalker.jp/series/' + data[0]['seriesId']
+		series_data['type'] = data[0]['comicFlag'] ? 'manga' : 'light novel'
+		series_data['publisher'] = await pub_name_link_to_id(data[0]['companyName'])
+		series_data['chapters'] = []
+		series_data['volumes'] = []
+
+		for (const item of data) {
+			if (item['seriesId'] !== series_data['series_id']) {
+				// Different series, ignore
+				continue
+			}
+			const book: Record<string, any> = {}
+			const series_title_details = clean_series_title(title)
+			const book_title = extract_title(title, series_title_details['series_title'])
 			// TODO connect to table to name>ID for authors and publisher
 			// Use files for now
 			const authors: Record<string, string> = {}
@@ -263,28 +282,26 @@ export async function bwg_parse_book_api(book_id: string): Promise<Record<string
 				}
 			}
 
-			book.push({
-				'series_title': series_title,
-				'series_title_kana': series_title_kana,
-				'series_id': series_id,
-				'is_chapter': is_chapter,
-				'book_title': book_title,
-				'number': Number(item['seriesNo']),
-				'image': item['coverImageUrl'],
-				'image_thumb': item['thumbnailImageUrl'],
-				'uuid': item['uuid'],
-				'url': 'https://global.bookwalker.jp/de' + item['uuid'],
-				'staff': staff,
-				'description': item['productExplanationDetails'],
-				'publisher': publisher !== null ? publisher : {'id': null, 'name': item['companyName'], 'link': null},
-				'type': item['comicFlag'] ? 'manga' : 'light novel'
-			})
+			book['uuid'] = item['uuid']
+			book['title'] = book_title
+			book['number'] = Number(item['seriesNo'])
+			book['cover'] = item['coverImageUrl']
+			book['thumbnail'] = item['thumbnailImageUrl']
+			book['url'] = 'https://global.bookwalker.jp/de' + item['uuid']
+			book['staff'] = staff
+			book['description'] = item['productExplanationDetails']
+
+			if (series_title_details['is_chapter']) {
+				series_data['chapters'].push(book)
+			} else {
+				series_data['volumes'].push(book)
+			}
 		}
 
-    return book
+    return series_data
 
   } catch (error) {
-    console.error(`Error fetching book ${book_id.toString()} JSON:`, error instanceof Error ? error.message : error)
+    console.error(`Error fetching book ${book_ids.toString()} JSON:`, error instanceof Error ? error.message : error)
     process.exit(1)
   }
 }
@@ -571,26 +588,29 @@ export async function full_series_data(series_id: number) {
 
 	// Use the first volume/chapter for further info
 	if (series_books[0]) {
-		const book_info = await bwg_parse_book_api(series_books[0]['uuid'])
+		const book_info = await bwg_parse_book_api([series_books[0]['uuid']])
 
-		if (book_info !== null && book_info.length > 0) {
+		if (book_info !== null) {
+			// Make life easier and extract chapter or volume
+			
+			const book_chap_vol = book_info['is_chapter_series'] ? book_info['chapters'][0] : book_info['volumes'][0]
 			data['series_id'] = series_id
-			data['series_title'] = book_info[0]['series_title']
-			data['series_title_ja'] = book_info[0]['series_title_kana']
-			// TODO Some kind of post-process to find the volume series id to link/merge
-			data['is_chapter_series'] = book_info[0]['is_chapter']
+			data['series_title'] = book_info['series_title']
+			data['series_title_ja'] = book_info['series_title_ja']
+			// TODO Some kind of post-process to find the volume series id to link/merge. DB trigger?
+			data['is_chapter_series'] = book_info['is_chapter_series']
 			data['url'] = 'https://global.bookwalker.jp/series/' + series_id
-			data['type'] = book_info[0]['type']
-			data['cover'] = book_info[0]['image']
-			data['thumbnail'] = series_books[0]['thumbnail']
+			data['type'] = book_info['type']
+			data['cover'] = book_chap_vol['cover']
+			data['thumbnail'] = book_chap_vol['thumbnail']
 			//data['series_title_ja_en'] = book_info[0]['']
-			data['staff'] = book_info[0]['staff']
-			data['distributor'] = book_info[0]['publisher']
+			data['staff'] = book_chap_vol['staff']
+			data['distributor'] = book_info['publisher']
 			// If it's not chapter 1 or volume 1, don't want the description as it won't make sense for series
-			data['description'] = book_info[0]['number'] == 1 ? book_info[0]['description'] : null
+			data['description'] = book_chap_vol['number'] == 1 ? book_chap_vol['description'] : null
 
 			// Use the last record as chapters are removed once said chapters are within a volume
-			if (book_info[0]['is_chapter']) {
+			if (data['is_chapter_series']) {
 				data['chapter_count'] = series_books[series_books.length - 1]['number']
 			} else {
 				data['volume_count'] = series_books[series_books.length - 1]['number']
@@ -613,6 +633,7 @@ export async function full_series_data(series_id: number) {
 
 	return BookWalkerGlobalMangaBakaSeries.parse(data)
 }
+
 /*
 export function worker_produce(worker: QueueClient) {
 	//const log = Logger.label('ann_news_schedule_refresh')

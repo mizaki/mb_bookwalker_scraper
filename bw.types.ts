@@ -27,13 +27,9 @@ const volume = z.object({
 	uuid: z.string(),
 	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
+	thumbnail: z.string().url().nullish(),
 	title: z.string().nullish(),
-	writer: null_array(staff).nullish(), // (Can be multiple) Author, Writer, Story, Original Work, By (author)
-	design: null_array(staff).nullish(), // Designed by, Character Design,
-	artist: null_array(staff).nullish(), // Illustrated by, Artist, Art, By (artist)
-	letterer: null_array(staff).nullish(), // Letterer
-	translator: null_array(staff).nullish(), // Translated by
-	complied: null_array(staff).nullish(), // Compiled by
+	staff: null_array(staff).nullish(),
 	distributor: distributor.nullish(),
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
@@ -50,6 +46,7 @@ const chapter = z.object({
 	uuid: z.string(),
 	url: z.string().url().nullish(),
 	cover: z.string().url().nullish(), // OWWPXNVne2Og5o9nA6tp3Q__.jpg all have this filename
+	thumbnail: z.string().url().nullish(),
 	title: z.string().nullish(),
 	staff: null_array(staff).nullish(),
 	distributor: distributor.nullish(),

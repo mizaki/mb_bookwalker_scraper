@@ -119,15 +119,19 @@ if (cmd == 'book') {
     const file_path = './data/manga_all_series_' + Date.now().toString() + '.json'
     saveJsonToFileAsync(all_series, file_path)
 } else if (cmd == 'series') {
+    // Expects series ID (a number)
     const series_details = await bwg_parse_series_json(parseInt(url))
     const file_path = './data/manga_series_' + url + '.json'
     saveJsonToFileAsync(series_details, file_path)
 } else if (cmd == 'full_series') {
+    // Expects series ID (a number)
     const series_details = await full_series_data(parseInt(url))
     const file_path = './data/series_full_' + url + '.json'
     saveJsonToFileAsync(series_details, file_path)
 } else if (cmd == 'book_api') {
-    const book_details = await bwg_parse_book_api(url)
+    // Expects book ID(s) (splits IDs by comma: uuid1,uuid2,uuid3)
+    const book_ids = url.split(',')
+    const book_details = await bwg_parse_book_api(book_ids)
     const file_path = './data/book_' + url + '.json'
     saveJsonToFileAsync(book_details, file_path)
 } else if (cmd == 'pubs') {
