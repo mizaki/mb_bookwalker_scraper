@@ -194,7 +194,6 @@ export async function bwg_parse_book_api(book_ids: string[]): Promise<Record<str
     const data = await response.json()
 
 		const series_data: Record<string, any> = {}
-		const books: Record<string, any>[] = []
 		const staff: Record<string, any>[] = []
 
 		// Grab series data from first record
@@ -213,7 +212,6 @@ export async function bwg_parse_book_api(book_ids: string[]): Promise<Record<str
 		series_data['series_title_ja'] = series_title_kana
 		series_data['url'] = 'https://global.bookwalker.jp/series/' + data[0]['seriesId']
 		series_data['type'] = data[0]['comicFlag'] ? 'manga' : 'light novel'
-		series_data['publisher'] = await pub_name_link_to_id(data[0]['companyName'])
 		series_data['chapters'] = []
 		series_data['volumes'] = []
 
@@ -227,7 +225,6 @@ export async function bwg_parse_book_api(book_ids: string[]): Promise<Record<str
 			const book_title = extract_title(title, series_title_details['series_title'])
 			// TODO connect to table to name>ID for authors and publisher
 			// Use files for now
-			const authors: Record<string, string> = {}
 			for (const author of item['authors']) {
 				let staff_item = null
 				switch (author['authorTypeName']) {
@@ -286,6 +283,7 @@ export async function bwg_parse_book_api(book_ids: string[]): Promise<Record<str
 			book['url'] = 'https://global.bookwalker.jp/de' + item['uuid']
 			book['staff'] = staff
 			book['description'] = item['productExplanationDetails']
+			book['distributor'] = await pub_name_link_to_id(data[0]['companyName'])
 
 			if (series_title_details['is_chapter']) {
 				series_data['chapters'].push(book)
@@ -389,7 +387,7 @@ function normalise_uuid(uuid: string = ''): string | null {
 }
 
 export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promise<BookWalkerGlobalMangaBakaSeries> {
-	const is_chapter = $('.detail-book-title .tag-list .tag-chapter, .tag-simulpub')?.[0] ? true : false
+	const is_chapter = $('.detail-book-title .tag-list .tag-chapter, .detail-book-title .tag-list .tag-simulpub')?.[0] ? true : false
 
 	function gen_staff(staff_info: any, role: string) {
 		staff_info.children('td').children('a').each((idx: number, staff: any) => {
@@ -401,8 +399,8 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 				data['staff'].push({
 					'id': Number(staff_id),
 					'name': staff_name,
+					'link': staff_href,
 					'role': role,
-					'link': staff_href
 				})
 			}
 		})
@@ -417,6 +415,15 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 		series_data['series_id'] = series_id && series_id[0] ? Number(series_id[0]) : null
 		series_data['url'] = 'https://global.bookwalker.jp/series/' + series_id
 	}
+	series_data['is_chapter_series'] = is_chapter
+	// To link series with chapters and volumes
+	const related = $('h3.book-main-title.title-style:contains("Related")')
+	if (related && related[0]) {
+		const related_href = related.parent().find('a.a-see-more-btn')?.attr('href')
+		const related_id = related_href ? /\d+/.exec(related_href)?.[0] : null
+		series_data['series_linked_id'] = related_id ? Number(related_id) : null 
+	}
+	
 	// Series title and type
 	// Use the title info from the top of the page for type
 	const series_title_top_text = $('.detail-book-title').text().trim()
@@ -424,6 +431,7 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 	series_data['type'] = series_type_match && series_type_match[0] ? series_type_match[0].toLowerCase() : null
 	const series_title_details = clean_series_title(series_title_top_text)
 	series_data['series_title'] = series_title_details['series_title']
+	
 
 
 	const data: Record<string, any> = {}
@@ -476,10 +484,10 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 				const pub_link = $detail.children('td').find('a').attr('href')
 				const pub_id = pub_link ? /\d+/.exec(pub_link) : null
 				data['distributor'] = {'name': null, 'link': null, 'id': null}
+				data['distributor']['id'] = pub_id ? Number(pub_id) : null
 				data['distributor']['name'] = $detail.children('td').text().trim()
 				data['distributor']['link'] = pub_link
-				data['distributor']['id'] = pub_id ? Number(pub_id) : null
-				series_data['distributor'] = data['distributor']
+				series_data['distributor'] = data['distributor'] // Duplicate to series for Zod (?)
 				break
 			case 'Genre':
 				const genres: string[] = $detail.children('td').text().trim().replace(/\s\s/g, '').split(',')
@@ -519,9 +527,9 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 	if (is_chapter) {
 		const series_title_top_text_match = series_title_top_text.match(/(?:.*\schapter\s|.*\s#)(\d+.\d+|\d+)/i)
 		if (series_title_top_text_match && series_title_top_text_match[1]) {
-			data['chapter'] = series_title_top_text_match[1]
+			data['number'] = series_title_top_text_match[1]
 		} else {
-			data['chapter'] = 1 // default to 1
+			data['number'] = '1' // default to 1
 		}
 
 		data['title'] = extract_title(series_title_top_text, series_data['series_title'])
@@ -529,11 +537,11 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 		const series_title_top_text_match = series_title_top_text.match(/.*\svol.*?\s(\d+)|(\d+)/i)
 		// Volume format can be "Volume n" or "Vol. n" or just a number (also within brackets)
 		if (series_title_top_text_match && series_title_top_text_match[1]) {
-			data['volume'] = series_title_top_text_match[1]
+			data['number'] = series_title_top_text_match[1]
 		} else if (series_title_top_text_match && series_title_top_text_match[2]) {
-			data['volume'] = series_title_top_text_match[2]
+			data['number'] = series_title_top_text_match[2]
 		} else {
-			data['volume'] = 1 // default to 1
+			data['number'] = '1' // default to 1
 		}
 
 		data['title'] = extract_title(series_title_top_text, series_data['series_title'])
@@ -562,9 +570,9 @@ export async function bwg_parse_page($: cheerio.CheerioAPI, uuid: string): Promi
 	data['rating'] = star_count
 
 	if (is_chapter) {
-		series_data['chapter'] = data
+		series_data['chapters'] = [data]
 	} else {
-		series_data['volume'] = data
+		series_data['volumes'] = [data]
 	}
 	return BookWalkerGlobalMangaBakaSeries.strict().parse(series_data)
 }
@@ -594,6 +602,7 @@ export async function full_series_data(series_id: number) {
 			data['series_title'] = book_info['series_title']
 			data['series_title_ja'] = book_info['series_title_ja']
 			// TODO Some kind of post-process to find the volume series id to link/merge. DB trigger?
+			// Page scrape can find this
 			data['is_chapter_series'] = book_info['is_chapter_series']
 			data['series_linked_id'] = null // This is to link series IDs between chapter and volumes series IDs
 			data['url'] = 'https://global.bookwalker.jp/series/' + series_id
@@ -602,7 +611,7 @@ export async function full_series_data(series_id: number) {
 			data['thumbnail'] = book_chap_vol['thumbnail']
 			//data['series_title_ja_en'] = book_info[0]['']
 			data['staff'] = book_chap_vol['staff']
-			data['distributor'] = book_info['publisher']
+			data['distributor'] = book_info['distributor']
 			// If it's not chapter 1 or volume 1, don't want the description as it won't make sense for series
 			data['description'] = book_chap_vol['number'] == 1 ? book_chap_vol['description'] : null
 

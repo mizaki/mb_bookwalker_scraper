@@ -34,7 +34,7 @@ const volume = z.object({
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),
-	volume: z.string().nullish(),
+	number: z.string().nullish(),
 	date: z.coerce.date().nullish(),
 	price: currency.nullish(),
 	rating: z.number().nullish(), // 5/5
@@ -53,7 +53,7 @@ const chapter = z.object({
 	genres: null_array(z.string()).nullish(),
 	maturity_rating: z.string().nullish(), // Have to use "mature" genre tag
 	description: z.string().nullish(),
-	chapter: z.string().nullish(),
+	number: z.string().nullish(),
 	date: z.coerce.date().nullish(),
 	price: currency.nullish(),
 	rating: z.number().nullish(), // 5/5
