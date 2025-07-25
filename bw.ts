@@ -94,13 +94,15 @@ export async function new_pending_releases_parge_page($: cheerio.CheerioAPI): Pr
 	for (const item of title_list.children('li')) {
 		const $item = $(item)
 		const title = $item.find('.a-tile-ttl').text().trim()
-		const title_url = $item.find('.a-tile-ttl a').attr('href')
+		const title_url_stub = $item.find('.a-tile-ttl a').attr('href')
+		const title_url = title_url_stub ? new URL(title_url_stub) : null
+		const release_id = normalise_uuid(title_url?.pathname.slice(1, -1))
 		const release_date = $item.find('.a-tile-release-date')?.text().replace(' release', '')
 		if (release_date == '') {
 			run = false
 			break
 		} else {
-			new_pending_releases.push({'title': title, 'url': title_url, 'release_date': release_date})
+			new_pending_releases.push({'release_id': release_id, 'title': title, 'url': title_url?.toString(), 'release_date': release_date})
 		}
 	}
 	return {'releases': new_pending_releases, 'next_page': run}
