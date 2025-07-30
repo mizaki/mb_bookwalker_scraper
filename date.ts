@@ -24,6 +24,9 @@ export const DATE_FORMATS = [
 
 	// Used by MangaDex API
 	"yyyy-LL-dd'T'HH:mm:ssZZ", // 2018-01-18T00:00:00+00:00
+
+	//Prending release Book Walker Global page
+	"LLL.dd", // Jul. 22
 ]
 
 export function string_to_date(input: string | null | undefined, return_error: boolean = false): DateTime {

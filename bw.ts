@@ -86,7 +86,7 @@ export async function all_series_page_parse(): Promise<Record<string, any>[]> {
 }
 
 export async function new_pending_releases_parge_page($: cheerio.CheerioAPI): Promise<any> {
-	// Parse each new release until last_date and/or last_title OR no release date
+	// Parse each new release until last_date (TODO: and/or last_title OR no release date)?
 	const new_pending_releases: Record<string, any>[] = []
 	let run: boolean = true
 
@@ -98,11 +98,18 @@ export async function new_pending_releases_parge_page($: cheerio.CheerioAPI): Pr
 		const title_url = title_url_stub ? new URL(title_url_stub) : null
 		const release_id = normalise_uuid(title_url?.pathname.slice(1, -1))
 		const release_date = $item.find('.a-tile-release-date')?.text().replace(' release', '')
-		if (release_date == '') {
+		// Not UTC? Using local timezone?
+		let release_date_js = release_date ? string_to_date(release_date) : null
+		const today = new Date(Date.now())
+		// BW pre-release dates don't have a year, check month and add a year as needed
+		if (release_date_js && release_date_js.month < today.getMonth()) {
+			release_date_js = release_date_js.plus({years: 1})
+		}
+		if (!release_date) {
 			run = false
 			break
 		} else {
-			new_pending_releases.push({'release_id': release_id, 'title': title, 'url': title_url?.toString(), 'release_date': release_date})
+			new_pending_releases.push({'release_id': release_id, 'title': title, 'url': title_url?.toString(), 'release_date': release_date_js?.toJSDate()})
 		}
 	}
 	return {'releases': new_pending_releases, 'next_page': run}
@@ -113,6 +120,7 @@ export async function new_pending_releases(): Promise<Record<string, any>[]> {
 	let page: number = 0
 	let next_page: boolean = true
 
+	// manga
 	while (next_page) {
 		page += 1
 		try {
@@ -127,9 +135,30 @@ export async function new_pending_releases(): Promise<Record<string, any>[]> {
 			} else {
 				console.error(error)
 			}
-			process.exit(1)
+			//process.exit(1)
 		}
 	}
+	// Light novel (lazy paste)
+	page = 0
+	next_page = true
+	while (next_page) {
+		page += 1
+		try {
+			const $ = await http_request(`https://global.bookwalker.jp/categories/3/?order=release&np=1&page=${page.toString()}`)
+			const parsedData = await new_pending_releases_parge_page($)
+			all_releases.push(...parsedData['releases'])
+			next_page = parsedData['next_page']
+		} catch (error: any) {
+			console.error('An error occurred during parsing:')
+			if (error instanceof Error) {
+				console.error(`Error: ${error.message}`)
+			} else {
+				console.error(error)
+			}
+			//process.exit(1)
+		}
+	}
+	
 	return all_releases
 }
 
